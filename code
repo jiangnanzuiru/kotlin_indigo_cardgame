@@ -1,0 +1,251 @@
+package indigo
+
+val ranks = listOf("A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K")
+val suits = listOf("♦", "♥", "♠", "♣")
+var decks = mutableListOf<String>()
+var cardsOnTable = mutableListOf<String>()
+var exitVar = false
+var playerScore = 0
+var computerScore = 0
+var playerLastWon = false
+
+var cardsPlayerWonNum = 0
+var cardsComputerWonNum = 0
+
+class Player(val name: String) {
+    var cards = mutableListOf<String>()
+    var cardsWon = mutableListOf<String>()
+    var score: Int = 0
+    var cardToPlayInt: Int = 0
+
+    fun playerPick() {
+        val cardsPlayerIndexed = cards.mapIndexed { index, card -> "${index + 1})$card" }
+        // iterate over each element and apply a transformation function
+        println("Cards in hand: ${cardsPlayerIndexed.joinToString(" ")}")
+        var cardToPlay: String
+        do {
+            println("Choose a card to play (1-${cards.size}):")
+            cardToPlay = readln()
+            if (cardToPlay == "exit") {
+                println("Game Over")
+                exitVar = true
+                return
+            }
+        } while (cardToPlay.toIntOrNull()
+                ?.let { it < 1 || it > cards.size } == true || !cardToPlay.matches(Regex("\\d+"))
+        )
+        cardToPlayInt = cardToPlay.toInt() - 1      // actual index Integer
+    }
+
+    fun computerDoMaths(cards: MutableList<String>): Int {
+        val indicesByEndsWithSuit = mutableMapOf<String, MutableList<Int>>()
+        val indicesByStartsWithRank = mutableMapOf<String, MutableList<Int>>()
+        cards.forEachIndexed { index, card ->
+            val suit = card.substring(card.length - 1)
+            indicesByEndsWithSuit.getOrPut(suit) { mutableListOf() }.add(index)
+        }
+        cards.forEachIndexed { index, card ->
+            val rank = card.substring(0, (card.length - 1))
+            indicesByStartsWithRank.getOrPut(rank) { mutableListOf() }.add(index)
+        }
+        val commonEndsWithSuit = indicesByEndsWithSuit.filterValues { it.size > 1 }
+        val commonStartsWithRank = indicesByStartsWithRank.filterValues { it.size > 1 }
+
+        return if(commonEndsWithSuit.isEmpty() && commonStartsWithRank.isEmpty()) {
+            cards.indices.random()
+        } else if (commonEndsWithSuit.isNotEmpty()) {
+            commonEndsWithSuit.values.random().random()
+        } else if (commonStartsWithRank.isNotEmpty()) {
+            commonStartsWithRank.values.random().random()
+        } else {
+            commonEndsWithSuit.values.random().random()
+        }
+    }
+
+    fun computerPick() {
+        println(cards.joinToString(" "))
+
+        // If there are no cards on the table:
+
+        if(cardsOnTable.isEmpty()) {
+            cardToPlayInt = computerDoMaths(cards)
+        } else {
+            // If there are cards on the table, identify the candidate cards (at its index):
+            val candidateCardIndex = mutableListOf<Int>()
+            val candidateCards = mutableListOf<String>()
+            for (card in cards) {
+                if(card.substring(0, card.length-1) == cardsOnTable.last().substring(0, cardsOnTable.last().length-1) || card.substring(card.length-1) == cardsOnTable.last().substring(cardsOnTable.last().length-1)) {
+                    candidateCardIndex.add(cards.indexOf(card))
+                    candidateCards.add(card)
+                }
+            }
+
+            cardToPlayInt = when {
+                cards.size == 1 -> 0     // when there's only 1 card in hand
+                candidateCardIndex.size == 1 -> candidateCardIndex[0]    // when there's only 1 candidate card
+                candidateCardIndex.isEmpty() -> computerDoMaths(cards)
+                else -> cards.indexOf(candidateCards[computerDoMaths(candidateCards)])    // when there's more than 1 candidate card
+            }
+        }
+
+        println("$name plays ${cards[cardToPlayInt]}")
+    }
+
+    fun addCardToTable() {
+        cardsOnTable.add(cards[cardToPlayInt])
+        cards.removeAt(cardToPlayInt)
+        println()
+        cardsOnTableReport()
+    }
+
+    fun turnCalc() {
+        // compare the chosen card with top-most card on table: if same, take all cards from the table & add to the win deck.
+        if (cardsOnTable.isEmpty()) {
+            addCardToTable()
+            return
+        }
+
+        if ( cards[cardToPlayInt].substring(startIndex = 0, endIndex = cards[cardToPlayInt].length - 1) == cardsOnTable.last().substring(0, cardsOnTable.last().length - 1) || cards[cardToPlayInt].substring(cards[cardToPlayInt].length - 1) == cardsOnTable.last().substring(cardsOnTable.last().length - 1) ) {
+            println("$name wins cards")
+
+            // calculate the score
+            for (card in cardsOnTable) {
+                if (Regex(("^(A|10|J|Q|K).*")).matches(card)) score++
+            }
+            if (Regex(("^(A|10|J|Q|K).*")).matches(cards[cardToPlayInt])) score++
+
+            if(name == "Player") {
+                playerScore = score
+            } else {
+                computerScore = score
+            }
+
+            println("Score: Player $playerScore - Computer $computerScore")
+
+            cardsWon.addAll(cardsOnTable)      // player win deck gets all cards on table
+            cardsWon.add(cards[cardToPlayInt])   //, plus the card that's just played
+            cards.removeAt(cardToPlayInt)     // player deck loses just the last 1 card that's played
+            cardsOnTable.clear()                    // cards on table are now all cleared and into the player win deck
+
+            if(name == "Player") {
+                cardsPlayerWonNum = cardsWon.size
+            } else {
+                cardsComputerWonNum = cardsWon.size
+            }
+
+            println("Cards: Player $cardsPlayerWonNum - Computer $cardsComputerWonNum")
+            println("\nNo cards on the table")
+
+            playerLastWon = (name == "Player")
+
+        } else {
+            addCardToTable()
+        }
+    }
+}
+
+
+fun main() {
+    println("Indigo Card Game")
+    var playerFirst: String
+    do {
+        println("Play first?")
+        playerFirst = readln()
+    } while (playerFirst !in setOf("yes", "no"))
+
+    resetCard()      // set up the deck
+    shuffleCard()    // shuffle the deck
+    cardsOnTable.addAll(decks.take(4))    // take 4 cards from the complete deck and add to the table
+    decks = decks.drop(4).toMutableList()
+    println("Initial cards on the table: ${cardsOnTable.joinToString(" ")}")
+    println()
+    cardsOnTableReport()
+
+    val player = Player("Player")
+    val computer = Player("Computer")
+
+    whileLoop@ while (true) {
+        for (deal in 0 until 4) {
+            player.cards.addAll(decks.take(6))
+            decks = decks.drop(6).toMutableList()
+            computer.cards.addAll(decks.take(6))
+            decks = decks.drop(6).toMutableList()
+
+            if (playerFirst == "yes") {
+                for (counter in 0 until 12) {
+                    if (counter % 2 == 0) {
+                        player.playerPick()
+                        player.turnCalc()
+                        if (exitVar) return
+                    } else {
+                        computer.computerPick()
+                        computer.turnCalc()
+                    }
+                }
+            } else {
+                for (counter in 0 until 12) {
+                    if (counter % 2 == 0) {
+                        computer.computerPick()
+                        computer.turnCalc()
+                    } else {
+                        player.playerPick()
+                        player.turnCalc()
+                        if (exitVar) return
+                    }
+                }
+            }
+        }
+
+        var remainingCardScore = 0
+        for (card in cardsOnTable) {
+            if (Regex(("^(A|10|J|Q|K).*")).matches(card)) remainingCardScore++
+        }
+
+        // The remaining cards on the table go to the player who won the cards last.
+        // In the rare case where none of the players win any cards, then all cards go to the player who played first.
+        if (playerLastWon || (computer.cardsWon.size == 0 && player.cardsWon.size == 0 && playerFirst == "yes")) {
+            player.cardsWon.addAll(cardsOnTable)      // player win deck gets all cards on table
+            player.score+=remainingCardScore
+            cardsOnTable.clear()                    // cards on table are now all cleared and into the player win deck
+        }
+
+        if(!playerLastWon || (computer.cardsWon.size == 0 && player.cardsWon.size == 0 && playerFirst == "no")) {
+            computer.cardsWon.addAll(cardsOnTable)
+            computer.score+=remainingCardScore
+            cardsOnTable.clear()
+        }
+
+        // The player who has the most cards gets three points. If the players have the same number of cards, then the player who played first gets these points.
+        if (computer.cardsWon.size > player.cardsWon.size) {
+            computer.score += 3
+        } else if (computer.cardsWon.size < player.cardsWon.size) {
+            player.score += 3
+        } else {
+            if (playerFirst == "yes") player.score += 3 else computer.score += 3
+        }
+
+        println("Score: Player ${player.score} - Computer ${computer.score}")
+        println("Cards: Player ${player.cardsWon.size} - Computer ${computer.cardsWon.size}")
+
+        println("Game Over")
+        return
+
+    }
+}
+
+fun cardsOnTableReport() {
+    println("${cardsOnTable.size} cards on the table, and the top card is ${cardsOnTable.last()}")
+}
+
+fun resetCard() {
+    decks.clear()
+    for (suit in suits) {
+        for (rank in ranks) {
+            decks.add("$rank$suit")
+        }
+    }
+}
+
+fun shuffleCard() {
+    decks.shuffle()
+}
